@@ -1,0 +1,48 @@
+/* src/css/app.scss */
+
+// Estilos para el Modo Oscuro Mejorado
+// Quasar añade automáticamente la clase 'body--dark' cuando el modo oscuro está activo.
+// Sobrescribimos las variables de color de Quasar aquí.
+body.body--dark {
+  // Colores de fondo
+  --q-dark-page: #121212; // Un gris oscuro profundo para el fondo de la página
+  --q-dark: #1e1e1e; // Un gris ligeramente más claro para superficies como tablas y tarjetas
+
+  // Colores principales ajustados para el modo oscuro
+  --q-primary: #7986cb; // Un índigo más suave
+  --q-secondary: #9575cd; // Un púrpura más suave
+  --q-accent: #4fc3f7; // El mismo azul claro, que resalta bien
+
+  // Colores de feedback
+  --q-positive: #81c784; // Verde más suave
+  --q-negative: #e57373; // Rojo más suave
+  --q-info: #64b5f6; // Azul info más suave
+  --q-warning: #ffd54f; // Amarillo más suave
+}
+
+// Estilos para el tema Rosa Pastel
+// Este código se activa cuando el body tiene la clase 'theme-pastel'
+body.theme-pastel {
+  // Colores principales de Quasar
+  --q-primary: #f48fb1; // Rosa claro para botones y cabeceras
+  --q-secondary: #ce93d8; // Púrpura pastel
+  --q-accent: #81d4fa; // Azul claro
+
+  // Colores de feedback
+  --q-positive: #a5d6a7; // Verde pastel
+  --q-negative: #ef9a9a; // Rojo pastel
+  --q-info: #90caf9; // Azul info pastel
+  --q-warning: #ffe082; // Amarillo pastel
+
+  // Colores de fondo y texto
+  --q-dark: #37474f;
+  --q-dark-page: #ffffff; // Fondo de página siempre blanco para este tema
+
+  // Sobrescribir colores de texto para mejor legibilidad
+  .text-primary {
+    color: #ad1457 !important; // Un rosa más oscuro para el texto
+  }
+  .text-positive {
+    color: #2e7d32 !important; // Un verde más oscuro para el texto
+  }
+}
