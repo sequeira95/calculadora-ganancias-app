@@ -30,22 +30,24 @@
           v-model="costoTotalModel"
           label="Costo Total"
           type="text"
-          inputmode="decimal"
-          @keydown="onDecimalInput"
+          inputmode="numeric"
+          @keydown="onNumericInput"
+          @focus="moveCursorToEnd"
           outlined
           dense
-          :rules="[(val) => /^[0-9.,]+$/.test(val) || 'Formato de monto inválido']"
+          :rules="[(val) => !!val || 'El costo es requerido']"
           input-class="text-right"
         />
         <q-input
           v-model="precioVentaModel"
           label="Precio de Venta Unitario"
           type="text"
-          inputmode="decimal"
-          @keydown="onDecimalInput"
+          inputmode="numeric"
+          @keydown="onNumericInput"
+          @focus="moveCursorToEnd"
           outlined
           dense
-          :rules="[(val) => /^[0-9.,]+$/.test(val) || 'Formato de monto inválido']"
+          :rules="[(val) => !!val || 'El precio es requerido']"
           input-class="text-right"
         />
       </q-card-section>
@@ -60,14 +62,12 @@
 
 <script setup lang="ts">
 import { ref, computed, watch } from 'vue';
-import type { Product } from 'src/types/models'; // CAMBIO AQUÍ
+import type { Product } from 'src/types/models';
 
 interface Props {
-  productToEdit?: Product | null;
+  productToEdit?: Product | null; // Acepta Product o null
 }
-const props = withDefaults(defineProps<Props>(), {
-  productToEdit: null,
-});
+const props = defineProps<Props>();
 
 const emit = defineEmits<(e: 'save', payload: Product) => void>();
 
@@ -115,18 +115,14 @@ function onNumericInput(evt: KeyboardEvent) {
   }
 }
 
-function onDecimalInput(evt: KeyboardEvent) {
+// --- CURSOR MANAGEMENT ---
+function moveCursorToEnd(evt: Event) {
   const target = evt.target as HTMLInputElement;
-  if (evt.key === ',' && target.value.includes(',')) {
-    evt.preventDefault();
-    return;
-  }
-  if (
-    !/^[0-9,]$/.test(evt.key) &&
-    !['Backspace', 'Delete', 'ArrowLeft', 'ArrowRight', 'Tab'].includes(evt.key)
-  ) {
-    evt.preventDefault();
-  }
+  // Usamos setTimeout con 0ms para asegurar que esta acción se ejecute
+  // después de que Vue haya terminado de actualizar el DOM.
+  setTimeout(() => {
+    target.setSelectionRange(target.value.length, target.value.length);
+  }, 0);
 }
 
 // --- COMPUTED MODELS ---
@@ -140,15 +136,16 @@ const cantidadModel = computed({
 
 function createCurrencyModel(key: 'costoTotal' | 'precioVentaUnitario') {
   return computed({
-    get: () =>
-      new Intl.NumberFormat('es-VE', { minimumFractionDigits: 2, maximumFractionDigits: 2 }).format(
-        productData.value[key],
-      ),
-    set: (newValue) => {
-      const cleanValue = String(newValue).replace(/[^0-9,]/g, '');
-      const parsableValue = cleanValue.replace(',', '.');
-      const num = parseFloat(parsableValue);
-      productData.value[key] = isNaN(num) ? 0 : num;
+    get: () => {
+      return new Intl.NumberFormat('es-VE', {
+        minimumFractionDigits: 2,
+        maximumFractionDigits: 2,
+      }).format(productData.value[key]);
+    },
+    set: (newValue: string) => {
+      const digitsOnly = String(newValue).replace(/\D/g, '');
+      const numberValue = parseInt(digitsOnly, 10) || 0;
+      productData.value[key] = numberValue / 100;
     },
   });
 }
