@@ -21,7 +21,7 @@
 
 <script setup lang="ts">
 import { computed, ref } from 'vue';
-import { date as qDate, QPopupProxy } from 'quasar';
+import { date, QPopupProxy } from 'quasar';
 
 const props = defineProps<{
   modelValue: number | null; // El valor que recibimos es un timestamp o null
@@ -36,11 +36,11 @@ const qDateProxy = ref<QPopupProxy | null>(null);
 // Propiedad computada para manejar el v-model del q-input
 const displayDate = computed({
   get: () => {
-    return props.modelValue ? qDate.formatDate(props.modelValue, 'DD/MM/YYYY') : '';
+    return props.modelValue ? date.formatDate(props.modelValue, 'DD/MM/YYYY') : '';
   },
   set: (value: string) => {
     if (value && value.length === 10 && isValidDate(value) === true) {
-      const newTimestamp = qDate.extractDate(value, 'DD/MM/YYYY').getTime();
+      const newTimestamp = date.extractDate(value, 'DD/MM/YYYY').getTime();
       emit('update:modelValue', newTimestamp);
     } else if (!value) {
       emit('update:modelValue', null);
@@ -50,12 +50,12 @@ const displayDate = computed({
 
 // Propiedad computada para el v-model del q-date (necesita formato YYYY/MM/DD)
 const calendarDate = computed(() => {
-  return props.modelValue ? qDate.formatDate(props.modelValue, 'YYYY/MM/DD') : '';
+  return props.modelValue ? date.formatDate(props.modelValue, 'YYYY/MM/DD') : '';
 });
 
 // Se activa cuando el usuario selecciona una fecha en el calendario
 function updateFromCalendar(value: string) {
-  const newTimestamp = qDate.extractDate(value, 'YYYY/MM/DD').getTime();
+  const newTimestamp = date.extractDate(value, 'YYYY/MM/DD').getTime();
   emit('update:modelValue', newTimestamp);
   qDateProxy.value?.hide();
 }
