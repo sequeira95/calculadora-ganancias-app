@@ -254,11 +254,20 @@
       </template>
     </q-table>
 
-    <!-- BOTÓN FLOTANTE PARA GUARDAR VENTA -->
-    <q-page-sticky position="bottom-right" :offset="[18, 18]">
-      <q-btn fab icon="save" color="accent" @click="openSaveSaleDialog" :disable="!hasSales">
+    <!-- BOTÓN FLOTANTE ARRASTRABLE PARA GUARDAR VENTA -->
+    <q-page-sticky position="bottom-right" :offset="fabPos">
+      <q-fab
+        v-model="fabOpen"
+        icon="save"
+        color="accent"
+        direction="up"
+        :disable="!hasSales"
+        draggable
+        @click="handleFabClick"
+        v-touch-pan.prevent.mouse="moveFab"
+      >
         <q-tooltip>Guardar Venta</q-tooltip>
-      </q-btn>
+      </q-fab>
     </q-page-sticky>
 
     <!-- DIÁLOGOS -->
@@ -327,7 +336,7 @@
 </template>
 
 <script setup lang="ts">
-import { ref, onMounted, computed } from 'vue';
+import { ref, onMounted, computed, watch } from 'vue';
 import { read, utils, writeFile } from 'xlsx';
 import { useQuasar, type QTableProps } from 'quasar';
 import ProductForm from 'src/components/ProductForm.vue';
@@ -357,6 +366,8 @@ const isConfirmResetDialogVisible = ref(false);
 const isConfirmSaveSaleDialogVisible = ref(false);
 const productToDeleteId = ref<number | null>(null);
 const saleDate = ref<number>(Date.now());
+const fabOpen = ref(false); // Necesario para el v-model del QFab
+const fabPos = ref<[number, number]>([18, 18]);
 
 // --- UTILITY FUNCTIONS ---
 function onNumericInput(evt: KeyboardEvent) {
@@ -402,6 +413,13 @@ async function loadProductsFromDB(): Promise<void> {
 onMounted(() => {
   void loadProductsFromDB();
 });
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+const moveFab = (ev: any) => {
+  if (ev.isFinal) {
+    return;
+  }
+  fabPos.value = [fabPos.value[0] - ev.delta.x, fabPos.value[1] - ev.delta.y];
+};
 
 const updateSalesInDB = debounce(async (productId: number, numericValue: number) => {
   try {
@@ -567,6 +585,12 @@ async function confirmResetAllSales() {
   }
 }
 
+function handleFabClick() {
+  if (hasSales.value) {
+    openSaveSaleDialog();
+  }
+}
+
 function openSaveSaleDialog() {
   saleDate.value = Date.now();
   isConfirmSaveSaleDialogVisible.value = true;
@@ -660,6 +684,14 @@ const columns: QTableProps['columns'] = [
   { name: 'ganancia', label: 'Ganancia', field: 'ganancia', align: 'right', sortable: true },
   { name: 'actions', label: 'Acciones', field: 'actions', align: 'right' },
 ];
+watch(
+  () => isConfirmSaveSaleDialogVisible.value,
+  (value) => {
+    if (!value) {
+      fabOpen.value = false;
+    }
+  },
+);
 </script>
 
 <style>
