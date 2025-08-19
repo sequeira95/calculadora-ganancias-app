@@ -1,8 +1,1 @@
-{
-  "appId": "org.capacitor.quasar.app",
-  "appName": "Calculadora de Ganancias",
-  "webDir": "www",
-  "android": {
-    "icon": "src-capacitor/icon.png"
-  }
-}
+{"appId":"org.capacitor.quasar.app","appName":"Calculadora Ganancias","webDir":"www","android":{"icon":"src-capacitor/icon.png"}}
