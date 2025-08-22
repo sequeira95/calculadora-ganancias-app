@@ -1,3 +1,5 @@
+// src/types/models.ts
+
 export interface Product {
   id?: number;
   nombre: string;
@@ -6,6 +8,14 @@ export interface Product {
   precioVentaUnitario: number;
   cantidadVendida?: number;
 }
+
+export interface Expense {
+  id?: number;
+  nombre: string;
+  valor: number;
+  cantidad?: number;
+}
+
 export interface SoldProduct {
   id?: number;
   productId: number;
@@ -15,4 +25,16 @@ export interface SoldProduct {
   precioVentaUnitario: number;
   ganancia: number;
   saleDate: number;
+}
+
+export interface Transaction {
+  id?: number;
+  type: 'sale' | 'expense'; // Para diferenciar el tipo
+  date: number; // Timestamp de la transacción
+  name: string; // Nombre del producto o gasto
+  quantity: number; // Cantidad vendida o incurrida
+  unitCost: number; // Costo unitario (para productos) o valor (para gastos)
+  unitPrice?: number; // Precio de venta (solo para ventas)
+  profit?: number; // Ganancia (solo para ventas)
+  total: number; // Monto total (positivo para ventas, negativo para gastos)
 }

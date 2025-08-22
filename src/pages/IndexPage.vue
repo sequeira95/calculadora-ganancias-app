@@ -1,6 +1,5 @@
 <template>
   <q-page class="q-pa-md">
-    <!-- CABECERA DE ACCIONES -->
     <q-card class="q-mb-md" flat>
       <q-card-section class="row justify-between items-center q-gutter-y-md">
         <div class="col-12 col-md-4">
@@ -33,7 +32,6 @@
               @click="openProductForm()"
             />
 
-            <!-- Menú de Acciones Adicionales -->
             <q-btn-dropdown
               :class="{ 'full-width': $q.screen.lt.sm }"
               color="grey-7"
@@ -73,7 +71,6 @@
               </q-list>
             </q-btn-dropdown>
 
-            <!-- Input de archivo oculto -->
             <input
               type="file"
               ref="fileInput"
@@ -92,7 +89,6 @@
       </q-card-section>
     </q-card>
 
-    <!-- TABLA DE PRODUCTOS / VISTA DE TARJETAS -->
     <q-table
       :rows="products"
       :columns="columns"
@@ -116,10 +112,9 @@
         </div>
       </template>
 
-      <!-- VISTA DE TARJETAS PARA MÓVILES -->
       <template v-slot:item="props">
         <div class="q-pa-xs col-xs-12 col-sm-6 col-md-4">
-          <q-card bordered flat>
+          <q-card bordered flat :dark="$q.dark.isActive">
             <q-card-section class="row items-center justify-between">
               <div class="text-h6 text-grey-8">{{ props.row.nombre }}</div>
               <div>
@@ -175,7 +170,8 @@
                     inputmode="numeric"
                     dense
                     outlined
-                    style="width: 60px; text-align: center"
+                    style="width: 70px"
+                    input-class="text-center"
                     class="q-mx-xs"
                   />
                   <q-btn
@@ -189,7 +185,10 @@
                 </div>
               </div>
             </q-card-section>
-            <q-card-section class="bg-grey-2 text-center">
+            <q-card-section
+              :class="$q.dark.isActive ? 'bg-grey-9' : 'bg-grey-2'"
+              class="text-center"
+            >
               <div class="text-subtitle1 text-positive text-weight-bold">
                 Ganancia:
                 {{
@@ -204,21 +203,23 @@
         </div>
       </template>
 
-      <!-- VISTA DE TABLA PARA ESCRITORIO -->
       <template v-slot:body-cell-cantidadVendida="props">
         <q-td :props="props">
-          <q-input
-            v-if="props.row.id"
-            :model-value="String(props.row.cantidadVendida || 0)"
-            @update:model-value="(val) => updateSales(props.row.id, val)"
-            @keydown="onNumericInput"
-            type="text"
-            inputmode="numeric"
-            dense
-            outlined
-            style="max-width: 100px"
-            class="q-mx-auto"
-          />
+          <div class="row items-center no-wrap justify-center q-gutter-x-sm">
+            <q-btn dense round flat size="sm" icon="remove" @click="decrementSale(props.row.id)" />
+            <q-input
+              v-if="props.row.id"
+              :model-value="String(props.row.cantidadVendida || 0)"
+              @update:model-value="(val) => updateSales(props.row.id, val)"
+              @keydown="onNumericInput"
+              type="text"
+              inputmode="numeric"
+              dense
+              outlined
+              style="width: 70px; text-align: center"
+            />
+            <q-btn dense round flat size="sm" icon="add" @click="incrementSale(props.row.id)" />
+          </div>
         </q-td>
       </template>
       <template v-slot:body-cell-ganancia="props">
@@ -254,7 +255,6 @@
       </template>
     </q-table>
 
-    <!-- BOTÓN FLOTANTE ARRASTRABLE PARA GUARDAR VENTA -->
     <q-page-sticky position="bottom-right" :offset="fabPos">
       <q-fab
         v-model="fabOpen"
@@ -270,7 +270,6 @@
       </q-fab>
     </q-page-sticky>
 
-    <!-- DIÁLOGOS -->
     <q-dialog v-model="isFormDialogVisible" @hide="productToEdit = null">
       <ProductForm :product-to-edit="productToEdit" @save="handleProductSave" />
     </q-dialog>
@@ -343,7 +342,9 @@ import ProductForm from 'src/components/ProductForm.vue';
 import DatePicker from 'src/components/DatePicker.vue';
 import { showSuccessNotification, showErrorNotification } from 'src/utils/notifications';
 import { db } from 'src/utils/db';
-import type { Product, SoldProduct } from 'src/types/models';
+import type { Product, Transaction } from 'src/types/models';
+
+const $q = useQuasar();
 
 interface RawExcelProduct {
   nombre: string;
@@ -353,7 +354,6 @@ interface RawExcelProduct {
 }
 
 // --- STATE ---
-const $q = useQuasar();
 const products = ref<Product[]>([]);
 const isLoading = ref<boolean>(true);
 const searchTerm = ref<string>('');
@@ -366,7 +366,7 @@ const isConfirmResetDialogVisible = ref(false);
 const isConfirmSaveSaleDialogVisible = ref(false);
 const productToDeleteId = ref<number | null>(null);
 const saleDate = ref<number>(Date.now());
-const fabOpen = ref(false); // Necesario para el v-model del QFab
+const fabOpen = ref(false);
 const fabPos = ref<[number, number]>([18, 18]);
 
 // --- UTILITY FUNCTIONS ---
@@ -377,25 +377,6 @@ function onNumericInput(evt: KeyboardEvent) {
   ) {
     evt.preventDefault();
   }
-}
-
-type AnyFunction = (...args: never[]) => void;
-interface DebouncedFunction<T extends AnyFunction> {
-  (...args: Parameters<T>): void;
-  flush: (...args: Parameters<T>) => void;
-}
-
-function debounce<T extends AnyFunction>(func: T, delay: number): DebouncedFunction<T> {
-  let timeout: ReturnType<typeof setTimeout>;
-  const debounced = function (...args: Parameters<T>) {
-    clearTimeout(timeout);
-    timeout = setTimeout(() => func(...args), delay);
-  } as DebouncedFunction<T>;
-  debounced.flush = function (...args: Parameters<T>) {
-    clearTimeout(timeout);
-    func(...args);
-  };
-  return debounced;
 }
 
 // --- DATABASE & CORE LOGIC ---
@@ -413,6 +394,7 @@ async function loadProductsFromDB(): Promise<void> {
 onMounted(() => {
   void loadProductsFromDB();
 });
+
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 const moveFab = (ev: any) => {
   if (ev.isFinal) {
@@ -421,23 +403,31 @@ const moveFab = (ev: any) => {
   fabPos.value = [fabPos.value[0] - ev.delta.x, fabPos.value[1] - ev.delta.y];
 };
 
-const updateSalesInDB = debounce(async (productId: number, numericValue: number) => {
-  try {
-    await db.products.update(productId, { cantidadVendida: numericValue });
-    const product = products.value.find((p) => p.id === productId);
-    if (product) product.cantidadVendida = numericValue;
-  } catch {
-    showErrorNotification('No se pudo guardar la venta.');
-  }
-}, 500);
+const updateSalesInDB = (() => {
+  let timeout: ReturnType<typeof setTimeout>;
+  return (productId: number, numericValue: number) => {
+    clearTimeout(timeout);
+    timeout = setTimeout(() => {
+      void (async () => {
+        try {
+          await db.products.update(productId, { cantidadVendida: numericValue });
+        } catch {
+          showErrorNotification('No se pudo guardar la venta.');
+        }
+      })();
+    }, 500);
+  };
+})();
 
 function updateSales(productId: number | undefined, value: string | number | null) {
   if (typeof productId === 'undefined') return;
   const stringValue = String(value ?? '');
   const numericValue = parseInt(stringValue.replace(/\D/g, ''), 10) || 0;
   const product = products.value.find((p) => p.id === productId);
-  if (product) product.cantidadVendida = numericValue;
-  updateSalesInDB(productId, numericValue);
+  if (product) {
+    product.cantidadVendida = numericValue;
+    updateSalesInDB(productId, numericValue);
+  }
 }
 
 function incrementSale(productId: number | undefined) {
@@ -460,7 +450,8 @@ function decrementSale(productId: number | undefined) {
 
 function resetSingleSale(productId: number | undefined) {
   if (typeof productId === 'undefined') return;
-  updateSalesInDB.flush(productId, 0);
+  updateSales(productId, 0);
+  void db.products.update(productId, { cantidadVendida: 0 });
 }
 
 // --- FILE & FORM HANDLING ---
@@ -603,20 +594,21 @@ async function confirmSaveSale() {
     return;
   }
 
-  const newSoldProducts: SoldProduct[] = productsToRecord.map((p) => ({
-    productId: p.id!,
-    nombre: p.nombre,
-    cantidadVendida: p.cantidadVendida!,
-    costoUnitario: p.costoUnitario,
-    precioVentaUnitario: p.precioVentaUnitario,
-    ganancia: (p.precioVentaUnitario - p.costoUnitario) * p.cantidadVendida!,
-    saleDate: saleDate.value,
+  const newTransactions: Transaction[] = productsToRecord.map((p) => ({
+    type: 'sale',
+    date: saleDate.value,
+    name: p.nombre,
+    quantity: p.cantidadVendida!,
+    unitCost: p.costoUnitario,
+    unitPrice: p.precioVentaUnitario,
+    profit: (p.precioVentaUnitario - p.costoUnitario) * p.cantidadVendida!,
+    total: p.precioVentaUnitario * p.cantidadVendida!,
   }));
 
   try {
-    await db.soldProducts.bulkAdd(newSoldProducts);
-    await confirmResetAllSales(); // Resetea las ventas después de guardar
-    showSuccessNotification('Ventas guardadas con éxito.');
+    await db.transactions.bulkAdd(newTransactions);
+    await confirmResetAllSales();
+    showSuccessNotification('Ventas guardadas con éxito en el historial.');
   } catch {
     showErrorNotification('Error al guardar las ventas.');
   } finally {

@@ -6,7 +6,8 @@ const routes: RouteRecordRaw[] = [
     component: () => import('layouts/MainLayout.vue'),
     children: [
       { path: '', component: () => import('pages/IndexPage.vue') },
-      { path: 'sales', component: () => import('pages/SalesHistoryPage.vue') }, // AÑADE ESTA LÍNEA
+      { path: 'history', component: () => import('pages/HistoryPage.vue') },
+      { path: 'expenses', component: () => import('pages/ExpensesPage.vue') },
     ],
   },
   {
