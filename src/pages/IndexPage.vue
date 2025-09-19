@@ -336,13 +336,16 @@
 
 <script setup lang="ts">
 import { ref, onMounted, computed, watch } from 'vue';
-import { read, utils, writeFile } from 'xlsx';
+import { read, utils } from 'xlsx';
 import { useQuasar, type QTableProps } from 'quasar';
 import ProductForm from 'src/components/ProductForm.vue';
 import DatePicker from 'src/components/DatePicker.vue';
 import { showSuccessNotification, showErrorNotification } from 'src/utils/notifications';
 import { db } from 'src/utils/db';
 import type { Product, Transaction } from 'src/types/models';
+// import { Filesystem, Directory } from '@capacitor/filesystem';
+// import { Capacitor } from '@capacitor/core';
+import { exportToExcel as exportUtil } from 'src/utils/excelExporter';
 
 const $q = useQuasar();
 
@@ -621,11 +624,12 @@ const hasSales = computed(() =>
   products.value.some((p) => p.cantidadVendida && p.cantidadVendida > 0),
 );
 
-function exportToExcel() {
+async function exportToExcel() {
   if (products.value.length === 0) {
     showErrorNotification('No hay productos para exportar.');
     return;
   }
+
   const dataToExport = products.value.map((p) => ({
     nombre: p.nombre,
     cantidad: p.cantidadInventario,
@@ -634,11 +638,86 @@ function exportToExcel() {
     cantidad_vendida: p.cantidadVendida || 0,
     ganancia_calculada: (p.precioVentaUnitario - p.costoUnitario) * (p.cantidadVendida || 0),
   }));
-  const worksheet = utils.json_to_sheet(dataToExport);
+  void (await exportUtil({ data: dataToExport, fileName: 'ReporteGanancias' }));
+  /*const worksheet = utils.json_to_sheet(dataToExport);
   const workbook = utils.book_new();
   utils.book_append_sheet(workbook, worksheet, 'Reporte de Ganancias');
-  writeFile(workbook, 'ReporteGanancias.xlsx');
-  showSuccessNotification('Reporte exportado con éxito.');
+
+  if (Capacitor.getPlatform() === 'web') {
+    // 👉 WEB: descarga normal
+    void import('xlsx').then(({ writeFile }) => {
+      writeFile(workbook, 'ReporteGanancias.xlsx');
+    });
+    showSuccessNotification('Reporte exportado con éxito.');
+    return;
+  }
+
+  // 👉 MÓVIL
+  try {
+    // 1. Generar buffer Excel
+    const excelBuffer = write(workbook, {
+      bookType: 'xlsx',
+      type: 'array',
+    });
+
+    // 2. Convertir a base64
+    const blob = new Blob([excelBuffer], {
+      type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+    });
+    const arrayBuffer = await blob.arrayBuffer();
+    const bytes = new Uint8Array(arrayBuffer);
+    let binary = '';
+    const chunkSize = 0x8000;
+    for (let i = 0; i < bytes.length; i += chunkSize) {
+      binary += String.fromCharCode.apply(
+        null,
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        bytes.subarray(i, i + chunkSize) as any,
+      );
+    }
+    const base64 = btoa(binary);
+    console.log('Archivo convertido a base64, tamaño:', base64.length);
+
+    // 3. Pedir permisos
+    try {
+      await Filesystem.requestPermissions();
+      console.log('Permisos de Filesystem concedidos ✅');
+    } catch (err) {
+      console.error('Error solicitando permisos:', err);
+      showErrorNotification('Error solicitando permisos: ' + JSON.stringify(err));
+      return;
+    }
+
+    // 4. Guardar en diferentes directorios
+    const fileName = 'ReporteGanancias.xlsx';
+    const directories = [Directory.Documents, Directory.External, Directory.Data];
+
+    let saved = false;
+    for (const dir of directories) {
+      try {
+        await Filesystem.writeFile({
+          path: fileName,
+          data: base64,
+          directory: dir,
+        });
+        console.log(`Archivo guardado en: ${dir}/${fileName}`);
+        showSuccessNotification(`Reporte exportado con éxito en ${dir} 📂`);
+        saved = true;
+        break;
+      } catch (err) {
+        console.error(`No se pudo guardar en ${dir}:`, err);
+        showErrorNotification(`No se pudo guardar en ${dir}: ${JSON.stringify(err)}`);
+      }
+    }
+
+    if (!saved) {
+      console.error('No se pudo guardar en ningún directorio disponible.');
+      showErrorNotification('No se pudo guardar en ningún directorio disponible.');
+    }
+  } catch (err) {
+    console.error('Error exportando Excel en móvil:', err);
+    showErrorNotification('Error exportando Excel en móvil: ' + JSON.stringify(err));
+  }*/
 }
 
 const totalProfit = computed<number>(() => {

@@ -232,11 +232,11 @@
 import { ref, onMounted, computed } from 'vue';
 // CAMBIO 3: Importar useQuasar
 import { useQuasar, date as qDate, type QTableProps } from 'quasar';
-import { utils, writeFile } from 'xlsx';
 import { db } from 'src/utils/db';
 import type { Transaction } from 'src/types/models';
 import DatePicker from 'src/components/DatePicker.vue';
 import { showSuccessNotification, showErrorNotification } from 'src/utils/notifications';
+import { exportToExcel as exportUtil } from 'src/utils/excelExporter';
 
 // CAMBIO 4: Inicializar $q para usarlo en el template
 const $q = useQuasar();
@@ -372,8 +372,8 @@ function openExportDialog() {
   }
 }
 
-function confirmExport() {
-  const dataToExport = filteredTransactions.value.map((tx) => ({
+async function confirmExport() {
+  /*const dataToExport = filteredTransactions.value.map((tx) => ({
     fecha: formatDate(tx.date),
     tipo: tx.type === 'sale' ? 'Venta' : 'Gasto',
     nombre: tx.name,
@@ -387,7 +387,18 @@ function confirmExport() {
   const worksheet = utils.json_to_sheet(dataToExport);
   const workbook = utils.book_new();
   utils.book_append_sheet(workbook, worksheet, 'Historial de Transacciones');
-  writeFile(workbook, 'HistorialTransacciones.xlsx');
+  writeFile(workbook, 'HistorialTransacciones.xlsx');*/
+  const dataToExport = filteredTransactions.value.map((tx) => ({
+    fecha: formatDate(tx.date),
+    tipo: tx.type === 'sale' ? 'Venta' : 'Gasto',
+    nombre: tx.name,
+    cantidad: tx.quantity,
+    costo_unitario: tx.unitCost,
+    precio_venta_unitario: tx.type === 'sale' ? tx.unitPrice : '',
+    ganancia: tx.type === 'sale' ? tx.profit : '',
+    total: tx.total,
+  }));
+  void (await exportUtil({ data: dataToExport, fileName: 'HistorialTransacciones' }));
   isConfirmExportVisible.value = false;
 }
 

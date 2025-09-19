@@ -310,13 +310,14 @@
 
 <script setup lang="ts">
 import { ref, onMounted, computed } from 'vue';
-import { read, utils, writeFile } from 'xlsx';
+import { read, utils } from 'xlsx';
 import { useQuasar, type QTableProps } from 'quasar';
 import ExpenseForm from 'src/components/ExpenseForm.vue';
 import DatePicker from 'src/components/DatePicker.vue';
 import { showSuccessNotification, showErrorNotification } from 'src/utils/notifications';
 import { db } from 'src/utils/db';
 import type { Expense, Transaction } from 'src/types/models';
+import { exportToExcel as exportUtil } from 'src/utils/excelExporter';
 
 const $q = useQuasar();
 
@@ -583,7 +584,7 @@ async function confirmSaveExpense() {
 }
 
 // --- EXPORTACIÓN Y COMPUTADAS ---
-function exportToExcel() {
+/*function exportToExcel() {
   if (expenses.value.length === 0) {
     showErrorNotification('No hay gastos para exportar.');
     return;
@@ -599,6 +600,19 @@ function exportToExcel() {
   utils.book_append_sheet(workbook, worksheet, 'Reporte de Gastos');
   writeFile(workbook, 'ReporteGastos.xlsx');
   showSuccessNotification('Reporte exportado con éxito.');
+}*/
+async function exportToExcel() {
+  if (expenses.value.length === 0) {
+    showErrorNotification('No hay gastos para exportar.');
+    return;
+  }
+  const dataToExport = expenses.value.map((e) => ({
+    nombre: e.nombre,
+    valor_unitario: e.valor,
+    cantidad: e.cantidad || 0,
+    total_gasto: e.valor * (e.cantidad || 0),
+  }));
+  void (await exportUtil({ data: dataToExport, fileName: 'ReporteGastos' }));
 }
 
 const totalExpenses = computed<number>(() => {
