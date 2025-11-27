@@ -9,6 +9,7 @@
             debounce="300"
             v-model="searchTerm"
             placeholder="Buscar producto..."
+            clearable
           >
             <template v-slot:prepend>
               <q-icon name="search" />
@@ -185,6 +186,33 @@
                 </div>
               </div>
             </q-card-section>
+            <q-card-section class="q-pt-none">
+              <div class="row justify-between items-center">
+                <q-btn
+                  flat
+                  dense
+                  no-caps
+                  color="primary"
+                  :icon="props.row.showComment ? 'expand_less' : 'comment'"
+                  :label="props.row.comment ? 'Editar Comentario' : 'Añadir Comentario'"
+                  @click="props.row.showComment = !props.row.showComment"
+                />
+              </div>
+              <q-slide-transition>
+                <div v-show="props.row.showComment">
+                  <q-input
+                    v-model="props.row.comment"
+                    @update:model-value="(val) => updateComment(props.row.id, val)"
+                    outlined
+                    dense
+                    type="textarea"
+                    label="Comentario"
+                    rows="2"
+                    class="q-mt-sm"
+                  />
+                </div>
+              </q-slide-transition>
+            </q-card-section>
             <q-card-section
               :class="$q.dark.isActive ? 'bg-grey-9' : 'bg-grey-2'"
               class="text-center"
@@ -230,6 +258,18 @@
                 (props.row.cantidadVendida || 0),
             )
           }}
+        </q-td>
+      </template>
+      <template v-slot:body-cell-comment="props">
+        <q-td :props="props">
+          <q-input
+            :model-value="props.row.comment"
+            @update:model-value="(val) => updateComment(props.row.id, val)"
+            dense
+            borderless
+            placeholder="Escribir..."
+            input-style="min-width: 150px"
+          />
         </q-td>
       </template>
       <template v-slot:body-cell-actions="props">
@@ -356,8 +396,12 @@ interface RawExcelProduct {
   precioVentaUnitario: number;
 }
 
+interface ProductWithUI extends Product {
+  showComment?: boolean;
+}
+
 // --- STATE ---
-const products = ref<Product[]>([]);
+const products = ref<ProductWithUI[]>([]);
 const isLoading = ref<boolean>(true);
 const searchTerm = ref<string>('');
 const fileInput = ref<HTMLInputElement | null>(null);
@@ -386,7 +430,11 @@ function onNumericInput(evt: KeyboardEvent) {
 async function loadProductsFromDB(): Promise<void> {
   try {
     const allProducts = await db.products.toArray();
-    products.value = allProducts.map((p) => ({ ...p, cantidadVendida: p.cantidadVendida || 0 }));
+    products.value = allProducts.map((p) => ({
+      ...p,
+      cantidadVendida: p.cantidadVendida || 0,
+      comment: p.comment || '',
+    }));
   } catch {
     showErrorNotification('Error al cargar productos.');
   } finally {
@@ -422,6 +470,22 @@ const updateSalesInDB = (() => {
   };
 })();
 
+const updateCommentInDB = (() => {
+  let timeout: ReturnType<typeof setTimeout>;
+  return (productId: number, comment: string) => {
+    clearTimeout(timeout);
+    timeout = setTimeout(() => {
+      void (async () => {
+        try {
+          await db.products.update(productId, { comment });
+        } catch {
+          showErrorNotification('No se pudo guardar el comentario.');
+        }
+      })();
+    }, 500);
+  };
+})();
+
 function updateSales(productId: number | undefined, value: string | number | null) {
   if (typeof productId === 'undefined') return;
   const stringValue = String(value ?? '');
@@ -430,6 +494,16 @@ function updateSales(productId: number | undefined, value: string | number | nul
   if (product) {
     product.cantidadVendida = numericValue;
     updateSalesInDB(productId, numericValue);
+  }
+}
+
+function updateComment(productId: number | undefined, value: string | number | null) {
+  if (typeof productId === 'undefined') return;
+  const comment = String(value ?? '');
+  const product = products.value.find((p) => p.id === productId);
+  if (product) {
+    product.comment = comment;
+    updateCommentInDB(productId, comment);
   }
 }
 
@@ -454,7 +528,8 @@ function decrementSale(productId: number | undefined) {
 function resetSingleSale(productId: number | undefined) {
   if (typeof productId === 'undefined') return;
   updateSales(productId, 0);
-  void db.products.update(productId, { cantidadVendida: 0 });
+  updateComment(productId, '');
+  void db.products.update(productId, { cantidadVendida: 0, comment: '' });
 }
 
 // --- FILE & FORM HANDLING ---
@@ -473,7 +548,7 @@ async function handleProductSave(productData: Product) {
       await db.products.update(productData.id, productData);
       showSuccessNotification('Producto actualizado con éxito.');
     } else {
-      await db.products.add({ ...productData, cantidadVendida: 0 });
+      await db.products.add({ ...productData, cantidadVendida: 0, comment: '' });
       showSuccessNotification('Producto guardado con éxito.');
     }
     await loadProductsFromDB();
@@ -512,6 +587,7 @@ function handleFileUpload(event: Event) {
             ? raw.costoTotal / raw.cantidadInventario
             : 0,
         cantidadVendida: 0,
+        comment: '',
       }));
 
       await db.products.bulkAdd(productsToSave);
@@ -568,7 +644,7 @@ function openResetSalesDialog() {
 }
 async function confirmResetAllSales() {
   try {
-    const updatedProducts = products.value.map((p) => ({ ...p, cantidadVendida: 0 }));
+    const updatedProducts = products.value.map((p) => ({ ...p, cantidadVendida: 0, comment: '' }));
     await db.products.bulkPut(updatedProducts);
     await loadProductsFromDB();
     showSuccessNotification('Todas las ventas han sido reseteadas.');
@@ -606,6 +682,7 @@ async function confirmSaveSale() {
     unitPrice: p.precioVentaUnitario,
     profit: (p.precioVentaUnitario - p.costoUnitario) * p.cantidadVendida!,
     total: p.precioVentaUnitario * p.cantidadVendida!,
+    ...(p.comment ? { comment: p.comment } : {}),
   }));
 
   try {
@@ -752,6 +829,7 @@ const columns: QTableProps['columns'] = [
     sortable: true,
   },
   { name: 'cantidadVendida', label: 'Cantidad Vendida', field: 'cantidadVendida', align: 'center' },
+  { name: 'comment', label: 'Comentario', field: 'comment', align: 'left' },
   { name: 'ganancia', label: 'Ganancia', field: 'ganancia', align: 'right', sortable: true },
   { name: 'actions', label: 'Acciones', field: 'actions', align: 'right' },
 ];

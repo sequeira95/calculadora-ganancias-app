@@ -3,7 +3,14 @@
     <q-card class="q-mb-md" flat>
       <q-card-section class="row justify-between items-center q-gutter-y-md">
         <div class="col-12 col-md-4">
-          <q-input outlined dense debounce="300" v-model="searchTerm" placeholder="Buscar gasto...">
+          <q-input
+            outlined
+            dense
+            debounce="300"
+            v-model="searchTerm"
+            placeholder="Buscar gasto..."
+            clearable
+          >
             <template v-slot:prepend>
               <q-icon name="search" />
             </template>
@@ -167,6 +174,33 @@
                 </div>
               </div>
             </q-card-section>
+            <q-card-section class="q-pt-none">
+              <div class="row justify-between items-center">
+                <q-btn
+                  flat
+                  dense
+                  no-caps
+                  color="primary"
+                  :icon="props.row.showComment ? 'expand_less' : 'comment'"
+                  :label="props.row.comment ? 'Editar Comentario' : 'Añadir Comentario'"
+                  @click="props.row.showComment = !props.row.showComment"
+                />
+              </div>
+              <q-slide-transition>
+                <div v-show="props.row.showComment">
+                  <q-input
+                    v-model="props.row.comment"
+                    @update:model-value="(val) => updateComment(props.row.id, val)"
+                    outlined
+                    dense
+                    type="textarea"
+                    label="Comentario"
+                    rows="2"
+                    class="q-mt-sm"
+                  />
+                </div>
+              </q-slide-transition>
+            </q-card-section>
             <q-card-section
               :class="$q.dark.isActive ? 'bg-grey-9' : 'bg-grey-2'"
               class="text-center"
@@ -202,6 +236,18 @@
             />
             <q-btn dense round flat size="sm" icon="add" @click="incrementQuantity(props.row.id)" />
           </div>
+        </q-td>
+      </template>
+      <template v-slot:body-cell-comment="props">
+        <q-td :props="props">
+          <q-input
+            :model-value="props.row.comment"
+            @update:model-value="(val) => updateComment(props.row.id, val)"
+            dense
+            borderless
+            placeholder="Escribir..."
+            input-style="min-width: 150px"
+          />
         </q-td>
       </template>
       <template v-slot:body-cell-total="props">
@@ -326,6 +372,11 @@ interface RawExcelExpense {
   nombre: string;
   valor: number;
 }
+
+interface ExpenseWithUI extends Expense {
+  showComment?: boolean;
+}
+
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 type AnyFunction = (...args: any[]) => any;
 
@@ -350,7 +401,7 @@ function debounce<T extends AnyFunction>(func: T, delay: number): DebouncedFunct
 }
 
 // --- ESTADO ---
-const expenses = ref<Expense[]>([]);
+const expenses = ref<ExpenseWithUI[]>([]);
 const isLoading = ref(true);
 const searchTerm = ref('');
 const fileInput = ref<HTMLInputElement | null>(null);
@@ -370,7 +421,11 @@ async function loadExpensesFromDB() {
   isLoading.value = true;
   try {
     const allExpenses = await db.expenses.toArray();
-    expenses.value = allExpenses.map((e) => ({ ...e, cantidad: e.cantidad || 0 }));
+    expenses.value = allExpenses.map((e) => ({
+      ...e,
+      cantidad: e.cantidad || 0,
+      comment: e.comment || '',
+    }));
   } catch {
     showErrorNotification('Error al cargar los gastos.');
   } finally {
@@ -387,6 +442,14 @@ const updateQuantityInDB = debounce(async (expenseId: number, numericValue: numb
   }
 }, 500);
 
+const updateCommentInDB = debounce(async (expenseId: number, comment: string) => {
+  try {
+    await db.expenses.update(expenseId, { comment });
+  } catch {
+    showErrorNotification('No se pudo guardar el comentario.');
+  }
+}, 500);
+
 function updateQuantity(expenseId: number | undefined, value: string | number | null) {
   if (typeof expenseId === 'undefined') return;
   const stringValue = String(value ?? '');
@@ -395,6 +458,16 @@ function updateQuantity(expenseId: number | undefined, value: string | number | 
   if (expense) {
     expense.cantidad = numericValue;
     updateQuantityInDB(expenseId, numericValue);
+  }
+}
+
+function updateComment(expenseId: number | undefined, value: string | number | null) {
+  if (typeof expenseId === 'undefined') return;
+  const comment = String(value ?? '');
+  const expense = expenses.value.find((e) => e.id === expenseId);
+  if (expense) {
+    expense.comment = comment;
+    updateCommentInDB(expenseId, comment);
   }
 }
 
@@ -419,8 +492,10 @@ function decrementQuantity(expenseId: number | undefined) {
 function resetSingleQuantity(expenseId: number | undefined) {
   if (typeof expenseId === 'undefined') return;
   updateQuantity(expenseId, 0);
+  updateComment(expenseId, '');
   updateQuantityInDB.flush();
-  void db.expenses.update(expenseId, { cantidad: 0 });
+  updateCommentInDB.flush();
+  void db.expenses.update(expenseId, { cantidad: 0, comment: '' });
 }
 
 // --- MANEJO DE ARCHIVOS Y FORMULARIO ---
@@ -439,7 +514,7 @@ async function handleExpenseSave(expenseData: Expense) {
       await db.expenses.update(expenseData.id, expenseData);
       showSuccessNotification('Gasto actualizado con éxito.');
     } else {
-      await db.expenses.add({ ...expenseData, cantidad: 0 });
+      await db.expenses.add({ ...expenseData, cantidad: 0, comment: '' });
       showSuccessNotification('Gasto guardado con éxito.');
     }
     await loadExpensesFromDB();
@@ -473,6 +548,7 @@ function handleFileUpload(event: Event) {
         nombre: raw.nombre,
         valor: raw.valor,
         cantidad: 0,
+        comment: '',
       }));
 
       await db.expenses.bulkAdd(expensesToSave as Expense[]);
@@ -529,7 +605,7 @@ function openResetQuantitiesDialog() {
 }
 async function confirmResetAllQuantities() {
   try {
-    const updatedExpenses = expenses.value.map((e) => ({ ...e, cantidad: 0 }));
+    const updatedExpenses = expenses.value.map((e) => ({ ...e, cantidad: 0, comment: '' }));
     await db.expenses.bulkPut(updatedExpenses);
     await loadExpensesFromDB();
     showSuccessNotification('Todas las cantidades han sido reseteadas.');
@@ -570,6 +646,7 @@ async function confirmSaveExpense() {
     quantity: e.cantidad!,
     unitCost: e.valor,
     total: -Math.abs(e.valor * e.cantidad!),
+    ...(e.comment ? { comment: e.comment } : {}),
   }));
 
   try {
@@ -639,6 +716,7 @@ const columns: QTableProps['columns'] = [
     sortable: true,
   },
   { name: 'cantidad', label: 'Cantidad', field: 'cantidad', align: 'center' },
+  { name: 'comment', label: 'Comentario', field: 'comment', align: 'left' },
   { name: 'total', label: 'Total', field: 'total', align: 'right', sortable: true },
   { name: 'actions', label: 'Acciones', field: 'actions', align: 'right' },
 ];

@@ -4,6 +4,9 @@
       <q-card-section class="row items-center justify-between">
         <div class="text-h6">Historial de Transacciones</div>
         <div class="q-gutter-sm">
+          <q-btn color="primary" icon="upload_file" label="Importar" @click="triggerFileInput">
+            <q-tooltip>Cargar historial desde Excel</q-tooltip>
+          </q-btn>
           <q-btn
             color="positive"
             icon="download"
@@ -49,6 +52,13 @@
         <q-btn @click="clearFilters" flat round dense icon="cleaning_services">
           <q-tooltip>Limpiar filtros</q-tooltip>
         </q-btn>
+        <input
+          type="file"
+          ref="fileInput"
+          @change="handleHistoryFileUpload"
+          class="hidden"
+          accept=".xlsx, .xls"
+        />
       </q-card-section>
 
       <q-table
@@ -129,6 +139,10 @@
                   <span class="text-caption text-grey">Cantidad:</span>
                   <span class="text-weight-medium">{{ props.row.quantity }}</span>
                 </div>
+                <div v-if="props.row.comment" class="row justify-between">
+                  <span class="text-caption text-grey">Comentario:</span>
+                  <span class="text-italic text-grey-8">{{ props.row.comment }}</span>
+                </div>
                 <div v-if="props.row.type === 'sale'" class="row justify-between text-positive">
                   <span class="text-caption">Ganancia:</span>
                   <span class="text-weight-bold">{{ formatCurrency(props.row.profit) }}</span>
@@ -162,6 +176,12 @@
             :class="props.row.type === 'expense' ? 'text-negative' : 'text-weight-bold'"
           >
             {{ formatCurrency(props.row.total) }}
+          </q-td>
+        </template>
+        <template v-slot:body-cell-comment="props">
+          <q-td :props="props">
+            <span v-if="props.row.comment" class="text-italic">{{ props.row.comment }}</span>
+            <span v-else class="text-grey-5">—</span>
           </q-td>
         </template>
         <template v-slot:body-cell-profit="props">
@@ -230,6 +250,7 @@
 
 <script setup lang="ts">
 import { ref, onMounted, computed } from 'vue';
+import { read, utils } from 'xlsx';
 // CAMBIO 3: Importar useQuasar
 import { useQuasar, date as qDate, type QTableProps } from 'quasar';
 import { db } from 'src/utils/db';
@@ -244,7 +265,13 @@ const $q = useQuasar();
 // --- ESTADO ---
 const isLoading = ref(true);
 const allTransactions = ref<Transaction[]>([]);
-const dateRange = ref<{ from: number | null; to: number | null }>({ from: null, to: null });
+const startOfMonth = new Date();
+startOfMonth.setDate(1);
+startOfMonth.setHours(0, 0, 0, 0);
+const dateRange = ref<{ from: number | null; to: number | null }>({
+  from: startOfMonth.getTime(),
+  to: null,
+});
 const searchTerm = ref('');
 const typeFilter = ref('all'); // 'all', 'sale', 'expense'
 const typeOptions = [
@@ -257,6 +284,7 @@ const isConfirmSingleDeleteVisible = ref(false);
 const isConfirmMassDeleteVisible = ref(false);
 const isConfirmExportVisible = ref(false);
 const transactionToDeleteId = ref<number | null>(null);
+const fileInput = ref<HTMLInputElement | null>(null);
 
 // --- OBTENCIÓN DE DATOS ---
 async function loadTransactionsFromDB() {
@@ -397,9 +425,92 @@ async function confirmExport() {
     precio_venta_unitario: tx.type === 'sale' ? tx.unitPrice : '',
     ganancia: tx.type === 'sale' ? tx.profit : '',
     total: tx.total,
+    comentario: tx.comment || '',
   }));
   void (await exportUtil({ data: dataToExport, fileName: 'HistorialTransacciones' }));
   isConfirmExportVisible.value = false;
+}
+
+// --- IMPORTACIÓN ---
+function triggerFileInput() {
+  fileInput.value?.click();
+}
+
+interface RawExcelTransaction {
+  fecha: string; // DD/MM/YYYY
+  tipo: string; // 'Venta' | 'Gasto'
+  nombre: string;
+  cantidad: number;
+  costo_unitario: number;
+  precio_venta_unitario?: number;
+  ganancia?: number;
+  total: number;
+  comentario?: string;
+}
+
+function parseDate(dateStr: string): number {
+  if (!dateStr) return Date.now();
+  const [day, month, year] = dateStr.split('/').map(Number);
+  if (!day || !month || !year) return Date.now();
+  return new Date(year, month - 1, day).getTime();
+}
+
+function handleHistoryFileUpload(event: Event) {
+  const target = event.target as HTMLInputElement;
+  const file = target.files?.[0];
+  if (!file) return;
+  isLoading.value = true;
+  const reader = new FileReader();
+  reader.onload = async (e: ProgressEvent<FileReader>) => {
+    try {
+      const data = new Uint8Array(e.target?.result as ArrayBuffer);
+      const workbook = read(data, { type: 'array' });
+      const sheetName = workbook.SheetNames[0];
+      if (!sheetName) throw new Error('El archivo Excel no contiene hojas.');
+      const worksheet = workbook.Sheets[sheetName];
+      if (!worksheet) throw new Error(`La hoja '${sheetName}' no se encontró.`);
+
+      const jsonRaw: RawExcelTransaction[] = utils.sheet_to_json<RawExcelTransaction>(worksheet, {
+        header: [
+          'fecha',
+          'tipo',
+          'nombre',
+          'cantidad',
+          'costo_unitario',
+          'precio_venta_unitario',
+          'ganancia',
+          'total',
+          'comentario',
+        ],
+        range: 1,
+      });
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const transactionsToSave: Transaction[] = jsonRaw.map((raw: any) => {
+        const type = raw.tipo === 'Venta' ? 'sale' : 'expense';
+        return {
+          date: parseDate(raw.fecha),
+          type: type,
+          name: raw.nombre,
+          quantity: raw.cantidad,
+          unitCost: raw.costo_unitario,
+          unitPrice: raw.precio_venta_unitario,
+          profit: raw.ganancia,
+          total: raw.total,
+          comment: raw.comentario,
+        };
+      });
+
+      await db.transactions.bulkAdd(transactionsToSave);
+      await loadTransactionsFromDB();
+      showSuccessNotification(`Éxito: ${transactionsToSave.length} transacciones importadas.`);
+    } catch (error) {
+      showErrorNotification(`Error: ${error instanceof Error ? error.message : 'Desconocido'}`);
+    } finally {
+      isLoading.value = false;
+      if (target) target.value = '';
+    }
+  };
+  reader.readAsArrayBuffer(file);
 }
 
 // --- FORMATEADORES ---
@@ -435,6 +546,14 @@ const columns: QTableProps['columns'] = [
     style: 'width: 300px',
   },
   { name: 'quantity', label: 'Cant.', field: 'quantity', sortable: true, align: 'center' },
+  {
+    name: 'comment',
+    label: 'Comentario',
+    field: 'comment',
+    sortable: false,
+    align: 'left',
+    style: 'max-width: 200px; white-space: normal;',
+  },
   { name: 'profit', label: 'Ganancia', field: 'profit', sortable: true, align: 'right' },
   { name: 'total', label: 'Monto Total', field: 'total', sortable: true, align: 'right' },
   { name: 'actions', label: 'Acciones', field: 'actions', align: 'center' },

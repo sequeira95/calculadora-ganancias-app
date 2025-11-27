@@ -7,6 +7,7 @@ export interface Product {
   costoUnitario: number;
   precioVentaUnitario: number;
   cantidadVendida?: number;
+  comment?: string;
 }
 
 export interface Expense {
@@ -14,6 +15,7 @@ export interface Expense {
   nombre: string;
   valor: number;
   cantidad?: number;
+  comment?: string;
 }
 
 export interface SoldProduct {
@@ -37,4 +39,5 @@ export interface Transaction {
   unitPrice?: number; // Precio de venta (solo para ventas)
   profit?: number; // Ganancia (solo para ventas)
   total: number; // Monto total (positivo para ventas, negativo para gastos)
+  comment?: string; // Comentario opcional de la transacción
 }
