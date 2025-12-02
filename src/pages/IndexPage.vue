@@ -4,12 +4,14 @@
       <q-card-section class="row justify-between items-center q-gutter-y-md">
         <div class="col-12 col-md-4">
           <q-input
+            ref="searchInputRef"
             outlined
             dense
             debounce="300"
             v-model="searchTerm"
             placeholder="Buscar producto..."
             clearable
+            @clear="handleSearchClear"
           >
             <template v-slot:prepend>
               <q-icon name="search" />
@@ -104,12 +106,44 @@
       bordered
     >
       <template v-slot:top>
-        <div class="col-12 row justify-between items-center">
-          <div class="text-h6">Lista de Productos</div>
-          <q-chip size="lg" icon="paid" color="positive" text-color="white">
-            <span class="text-weight-light q-mr-xs">Ganancia Total:</span>
-            <span class="text-weight-bold">{{ formatCurrency(totalProfit) }}</span>
-          </q-chip>
+        <div class="text-h6">Lista de Productos</div>
+        <div class="row q-col-gutter-xs">
+          <div class="col-6 col-md-auto">
+            <q-chip
+              size="sm"
+              icon="paid"
+              color="positive"
+              text-color="white"
+              class="full-width justify-center"
+            >
+              <span class="text-weight-light q-mr-xs">Ganancia Total:</span>
+              <span class="text-weight-bold">{{ formatCurrency(totalProfit) }}</span>
+            </q-chip>
+          </div>
+          <div class="col-6 col-md-auto">
+            <q-chip
+              size="sm"
+              icon="shopping_cart"
+              color="primary"
+              text-color="white"
+              class="full-width justify-center"
+            >
+              <span class="text-weight-light q-mr-xs">Total Venta:</span>
+              <span class="text-weight-bold">{{ formatCurrency(totalSalesStandard) }}</span>
+            </q-chip>
+          </div>
+          <div class="col-6 col-md-auto">
+            <q-chip
+              size="sm"
+              icon="star"
+              color="accent"
+              text-color="white"
+              class="full-width justify-center"
+            >
+              <span class="text-weight-light q-mr-xs">Total Personalizados:</span>
+              <span class="text-weight-bold">{{ formatCurrency(totalCustomProfit) }}</span>
+            </q-chip>
+          </div>
         </div>
       </template>
 
@@ -377,7 +411,7 @@
 <script setup lang="ts">
 import { ref, onMounted, computed, watch } from 'vue';
 import { read, utils } from 'xlsx';
-import { useQuasar, type QTableProps } from 'quasar';
+import { useQuasar, type QTableProps, type QInput } from 'quasar';
 import ProductForm from 'src/components/ProductForm.vue';
 import DatePicker from 'src/components/DatePicker.vue';
 import { showSuccessNotification, showErrorNotification } from 'src/utils/notifications';
@@ -415,6 +449,7 @@ const productToDeleteId = ref<number | null>(null);
 const saleDate = ref<number>(Date.now());
 const fabOpen = ref(false);
 const fabPos = ref<[number, number]>([18, 18]);
+const searchInputRef = ref<QInput | null>(null);
 
 // --- UTILITY FUNCTIONS ---
 function onNumericInput(evt: KeyboardEvent) {
@@ -434,6 +469,7 @@ async function loadProductsFromDB(): Promise<void> {
       ...p,
       cantidadVendida: p.cantidadVendida || 0,
       comment: p.comment || '',
+      isCustom: p.isCustom || false,
     }));
   } catch {
     showErrorNotification('Error al cargar productos.');
@@ -683,6 +719,7 @@ async function confirmSaveSale() {
     profit: (p.precioVentaUnitario - p.costoUnitario) * p.cantidadVendida!,
     total: p.precioVentaUnitario * p.cantidadVendida!,
     ...(p.comment ? { comment: p.comment } : {}),
+    isCustom: !!p.isCustom,
   }));
 
   try {
@@ -693,6 +730,16 @@ async function confirmSaveSale() {
     showErrorNotification('Error al guardar las ventas.');
   } finally {
     isConfirmSaveSaleDialogVisible.value = false;
+  }
+}
+
+function handleSearchClear() {
+  searchTerm.value = '';
+  // Mantener el foco en el input para que el teclado no se cierre en móvil
+  if (searchInputRef.value) {
+    setTimeout(() => {
+      searchInputRef.value?.$el.querySelector('input')?.focus();
+    }, 50);
   }
 }
 
@@ -798,10 +845,27 @@ async function exportToExcel() {
 }
 
 const totalProfit = computed<number>(() => {
-  return products.value.reduce(
-    (total, p) => total + (p.precioVentaUnitario - p.costoUnitario) * (p.cantidadVendida || 0),
-    0,
-  );
+  return products.value
+    .filter((p) => !p.isCustom)
+    .reduce(
+      (total, p) => total + (p.precioVentaUnitario - p.costoUnitario) * (p.cantidadVendida || 0),
+      0,
+    );
+});
+
+const totalSalesStandard = computed<number>(() => {
+  return products.value
+    .filter((p) => !p.isCustom)
+    .reduce((total, p) => total + p.precioVentaUnitario * (p.cantidadVendida || 0), 0);
+});
+
+const totalCustomProfit = computed<number>(() => {
+  return products.value
+    .filter((p) => p.isCustom)
+    .reduce(
+      (total, p) => total + (p.precioVentaUnitario - p.costoUnitario) * (p.cantidadVendida || 0),
+      0,
+    );
 });
 
 function formatCurrency(value: number): string {

@@ -4,12 +4,14 @@
       <q-card-section class="row justify-between items-center q-gutter-y-md">
         <div class="col-12 col-md-4">
           <q-input
+            ref="searchInputRef"
             outlined
             dense
             debounce="300"
             v-model="searchTerm"
             placeholder="Buscar gasto..."
             clearable
+            @clear="handleSearchClear"
           >
             <template v-slot:prepend>
               <q-icon name="search" />
@@ -357,7 +359,7 @@
 <script setup lang="ts">
 import { ref, onMounted, computed } from 'vue';
 import { read, utils } from 'xlsx';
-import { useQuasar, type QTableProps } from 'quasar';
+import { useQuasar, type QTableProps, type QInput } from 'quasar';
 import ExpenseForm from 'src/components/ExpenseForm.vue';
 import DatePicker from 'src/components/DatePicker.vue';
 import { showSuccessNotification, showErrorNotification } from 'src/utils/notifications';
@@ -415,6 +417,7 @@ const expenseDate = ref<number>(Date.now());
 const isConfirmSaveDialogVisible = ref(false);
 const fabOpen = ref(false);
 const fabPos = ref<[number, number]>([18, 18]);
+const searchInputRef = ref<QInput | null>(null);
 
 // --- LÓGICA DE BASE DE DATOS Y CANTIDADES ---
 async function loadExpensesFromDB() {
@@ -657,6 +660,16 @@ async function confirmSaveExpense() {
     showErrorNotification('Error al guardar los gastos.');
   } finally {
     isConfirmSaveDialogVisible.value = false;
+  }
+}
+
+function handleSearchClear() {
+  searchTerm.value = '';
+  // Mantener el foco en el input para que el teclado no se cierre en móvil
+  if (searchInputRef.value) {
+    setTimeout(() => {
+      searchInputRef.value?.$el.querySelector('input')?.focus();
+    }, 50);
   }
 }
 

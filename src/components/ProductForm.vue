@@ -14,6 +14,7 @@
           :rules="[(val) => !!val || 'El nombre es requerido']"
           autofocus
         />
+        <q-checkbox v-model="productData.isCustom" label="Producto Personalizado" />
         <NumericInput
           v-model="productData.cantidadInventario"
           label="Cantidad en Inventario"
@@ -26,7 +27,9 @@
           format="currency"
           :rules="[
             (val: string) =>
-              (val && parseInt(val.replace(/\D/g, '')) > 0) || 'El costo debe ser mayor a 0',
+              productData.isCustom ||
+              (val && parseInt(val.replace(/\D/g, '')) > 0) ||
+              'El costo debe ser mayor a 0',
           ]"
         />
         <NumericInput
@@ -66,6 +69,7 @@ const productData = ref({
   cantidadInventario: 0,
   costoTotal: 0,
   precioVentaUnitario: 0,
+  isCustom: false,
 });
 
 const isEditing = computed(() => !!props.productToEdit);
@@ -80,6 +84,7 @@ watch(
         cantidadInventario: newProduct.cantidadInventario,
         costoTotal: newProduct.costoUnitario * newProduct.cantidadInventario,
         precioVentaUnitario: newProduct.precioVentaUnitario,
+        isCustom: newProduct.isCustom || false,
       };
     } else {
       productData.value = {
@@ -88,6 +93,7 @@ watch(
         cantidadInventario: 0,
         costoTotal: 0,
         precioVentaUnitario: 0,
+        isCustom: false,
       };
     }
   },
@@ -95,7 +101,8 @@ watch(
 );
 
 function submitForm() {
-  const { id, nombre, cantidadInventario, costoTotal, precioVentaUnitario } = productData.value;
+  const { id, nombre, cantidadInventario, costoTotal, precioVentaUnitario, isCustom } =
+    productData.value;
   const costoUnitario = cantidadInventario > 0 ? costoTotal / cantidadInventario : 0;
 
   const finalProduct: Product = {
@@ -104,6 +111,7 @@ function submitForm() {
     cantidadInventario,
     costoUnitario,
     precioVentaUnitario,
+    isCustom,
   };
   emit('save', finalProduct);
 }

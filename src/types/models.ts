@@ -8,6 +8,7 @@ export interface Product {
   precioVentaUnitario: number;
   cantidadVendida?: number;
   comment?: string;
+  isCustom?: boolean;
 }
 
 export interface Expense {
@@ -40,4 +41,5 @@ export interface Transaction {
   profit?: number; // Ganancia (solo para ventas)
   total: number; // Monto total (positivo para ventas, negativo para gastos)
   comment?: string; // Comentario opcional de la transacción
+  isCustom?: boolean; // Indica si es un producto personalizado
 }

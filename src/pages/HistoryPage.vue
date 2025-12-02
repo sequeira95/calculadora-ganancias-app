@@ -28,12 +28,14 @@
 
       <q-card-section class="row q-gutter-md items-center">
         <q-input
+          ref="searchInputRef"
           v-model="searchTerm"
           label="Buscar por nombre..."
           dense
           filled
           class="col-12 col-sm-3 col-md-3"
           clearable
+          @clear="handleSearchClear"
         >
           <template v-slot:prepend><q-icon name="search" /></template>
         </q-input>
@@ -76,33 +78,76 @@
             <q-chip size="sm" icon="functions" color="grey-8" text-color="white">
               <span class="text-weight-light q-mr-xs">Items:</span>
               <span class="text-weight-bold">
-                (<span style="color: #ffcdd2">{{ totalExpenseItems }}</span>
+                (<span style="color: #ffcdd2" title="Gastos">{{ totalExpenseItems }}</span>
                 |
-                <span style="color: #c8e6c9">{{ totalSaleItems }}</span
+                <span style="color: #c8e6c9" title="Ventas">{{ totalSaleItems }}</span>
+                |
+                <span style="color: #b388ff" title="Personalizados">{{ totalCustomItems }}</span
                 >)
               </span>
             </q-chip>
-            <q-chip size="sm" icon="arrow_upward" color="positive" text-color="white">
-              <span class="text-weight-light q-mr-xs">Total Ventas:</span>
-              <span class="text-weight-bold">{{ formatCurrency(totalSales) }}</span>
-            </q-chip>
-            <q-chip size="sm" icon="arrow_downward" color="negative" text-color="white">
-              <span class="text-weight-light q-mr-xs">Total Gastos:</span>
-              <span class="text-weight-bold">{{ formatCurrency(totalExpenses) }}</span>
-            </q-chip>
-            <q-chip size="sm" icon="payments" color="info" text-color="white">
-              <span class="text-weight-light q-mr-xs">Ganancia Bruta:</span>
-              <span class="text-weight-bold">{{ formatCurrency(totalGrossProfit) }}</span>
-            </q-chip>
-            <q-chip
-              size="sm"
-              :icon="netTotal >= 0 ? 'trending_up' : 'trending_down'"
-              :color="netTotal >= 0 ? 'primary' : 'deep-orange'"
-              text-color="white"
-            >
-              <span class="text-weight-light q-mr-xs">Balance Neto (Ganancia):</span>
-              <span class="text-weight-bold">{{ formatCurrency(netTotal) }}</span>
-            </q-chip>
+            <div class="row q-col-gutter-xs">
+              <div class="col-6 col-md-auto">
+                <q-chip
+                  size="sm"
+                  icon="paid"
+                  color="positive"
+                  text-color="white"
+                  class="full-width justify-center"
+                >
+                  <span class="text-weight-light q-mr-xs">Ganancia Bruta:</span>
+                  <span class="text-weight-bold">{{ formatCurrency(totalGrossProfit) }}</span>
+                </q-chip>
+              </div>
+              <div class="col-6 col-md-auto">
+                <q-chip
+                  size="sm"
+                  icon="shopping_cart"
+                  color="primary"
+                  text-color="white"
+                  class="full-width justify-center"
+                >
+                  <span class="text-weight-light q-mr-xs">Total Ventas:</span>
+                  <span class="text-weight-bold">{{ formatCurrency(totalSales) }}</span>
+                </q-chip>
+              </div>
+              <div class="col-6 col-md-auto">
+                <q-chip
+                  size="sm"
+                  icon="arrow_downward"
+                  color="negative"
+                  text-color="white"
+                  class="full-width justify-center"
+                >
+                  <span class="text-weight-light q-mr-xs">Total Gastos:</span>
+                  <span class="text-weight-bold">{{ formatCurrency(totalExpenses) }}</span>
+                </q-chip>
+              </div>
+              <div class="col-6 col-md-auto">
+                <q-chip
+                  size="sm"
+                  icon="account_balance_wallet"
+                  color="info"
+                  text-color="white"
+                  class="full-width justify-center"
+                >
+                  <span class="text-weight-light q-mr-xs">Balance Neto:</span>
+                  <span class="text-weight-bold">{{ formatCurrency(netTotal) }}</span>
+                </q-chip>
+              </div>
+              <div class="col-6 col-md-auto">
+                <q-chip
+                  size="sm"
+                  icon="star"
+                  color="accent"
+                  text-color="white"
+                  class="full-width justify-center"
+                >
+                  <span class="text-weight-light q-mr-xs">Total Personalizados:</span>
+                  <span class="text-weight-bold">{{ formatCurrency(totalCustomProfit) }}</span>
+                </q-chip>
+              </div>
+            </div>
           </div>
         </template>
 
@@ -252,7 +297,7 @@
 import { ref, onMounted, computed } from 'vue';
 import { read, utils } from 'xlsx';
 // CAMBIO 3: Importar useQuasar
-import { useQuasar, date as qDate, type QTableProps } from 'quasar';
+import { useQuasar, date as qDate, type QTableProps, type QInput } from 'quasar';
 import { db } from 'src/utils/db';
 import type { Transaction } from 'src/types/models';
 import DatePicker from 'src/components/DatePicker.vue';
@@ -285,6 +330,7 @@ const isConfirmMassDeleteVisible = ref(false);
 const isConfirmExportVisible = ref(false);
 const transactionToDeleteId = ref<number | null>(null);
 const fileInput = ref<HTMLInputElement | null>(null);
+const searchInputRef = ref<QInput | null>(null);
 
 // --- OBTENCIÓN DE DATOS ---
 async function loadTransactionsFromDB() {
@@ -309,24 +355,28 @@ const filteredTransactions = computed(() => {
 // --- MARCADORES ---
 const totalSales = computed(() => {
   return filteredTransactions.value
-    .filter((tx) => tx.type === 'sale')
-    .reduce((sum, tx) => sum + tx.total, 0);
+    .filter((t) => t.type === 'sale' && !t.isCustom)
+    .reduce((sum, t) => sum + t.total, 0);
 });
 
 const totalExpenses = computed(() => {
   return filteredTransactions.value
-    .filter((tx) => tx.type === 'expense')
-    .reduce((sum, tx) => sum + tx.total, 0);
+    .filter((t) => t.type === 'expense')
+    .reduce((sum, t) => sum + Math.abs(t.total), 0);
 });
 
 const totalGrossProfit = computed(() => {
   return filteredTransactions.value
-    .filter((tx) => tx.type === 'sale')
-    .reduce((sum, tx) => sum + (tx.profit || 0), 0);
+    .filter((t) => t.type === 'sale' && !t.isCustom)
+    .reduce((sum, t) => sum + (t.profit || 0), 0);
 });
 
 const totalSaleItems = computed(() => {
-  return filteredTransactions.value.filter((tx) => tx.type === 'sale').length;
+  return filteredTransactions.value.filter((t) => t.type === 'sale' && !t.isCustom).length;
+});
+
+const totalCustomItems = computed(() => {
+  return filteredTransactions.value.filter((t) => t.type === 'sale' && t.isCustom).length;
 });
 
 const totalExpenseItems = computed(() => {
@@ -334,7 +384,13 @@ const totalExpenseItems = computed(() => {
 });
 
 const netTotal = computed(() => {
-  return totalGrossProfit.value + totalExpenses.value;
+  return totalGrossProfit.value - totalExpenses.value;
+});
+
+const totalCustomProfit = computed(() => {
+  return filteredTransactions.value
+    .filter((t) => t.type === 'sale' && t.isCustom)
+    .reduce((sum, t) => sum + (t.profit || 0), 0);
 });
 
 const massDeleteMessage = computed(() => {
@@ -346,6 +402,16 @@ function clearFilters() {
   dateRange.value = { from: null, to: null };
   searchTerm.value = '';
   typeFilter.value = 'all';
+}
+
+function handleSearchClear() {
+  searchTerm.value = '';
+  // Mantener el foco en el input para que el teclado no se cierre en móvil
+  if (searchInputRef.value) {
+    setTimeout(() => {
+      searchInputRef.value?.$el.querySelector('input')?.focus();
+    }, 50);
+  }
 }
 
 // --- MANEJO DE DIÁLOGOS (ELIMINAR) ---
@@ -401,21 +467,6 @@ function openExportDialog() {
 }
 
 async function confirmExport() {
-  /*const dataToExport = filteredTransactions.value.map((tx) => ({
-    fecha: formatDate(tx.date),
-    tipo: tx.type === 'sale' ? 'Venta' : 'Gasto',
-    nombre: tx.name,
-    cantidad: tx.quantity,
-    costo_unitario: tx.unitCost,
-    precio_venta_unitario: tx.type === 'sale' ? tx.unitPrice : '',
-    ganancia: tx.type === 'sale' ? tx.profit : '',
-    total: tx.total,
-  }));
-
-  const worksheet = utils.json_to_sheet(dataToExport);
-  const workbook = utils.book_new();
-  utils.book_append_sheet(workbook, worksheet, 'Historial de Transacciones');
-  writeFile(workbook, 'HistorialTransacciones.xlsx');*/
   const dataToExport = filteredTransactions.value.map((tx) => ({
     fecha: formatDate(tx.date),
     tipo: tx.type === 'sale' ? 'Venta' : 'Gasto',
@@ -426,6 +477,7 @@ async function confirmExport() {
     ganancia: tx.type === 'sale' ? tx.profit : '',
     total: tx.total,
     comentario: tx.comment || '',
+    personalizado: tx.isCustom ? 'Si' : 'No',
   }));
   void (await exportUtil({ data: dataToExport, fileName: 'HistorialTransacciones' }));
   isConfirmExportVisible.value = false;
@@ -446,6 +498,7 @@ interface RawExcelTransaction {
   ganancia?: number;
   total: number;
   comentario?: string;
+  personalizado?: boolean;
 }
 
 function parseDate(dateStr: string): number {
@@ -481,6 +534,7 @@ function handleHistoryFileUpload(event: Event) {
           'ganancia',
           'total',
           'comentario',
+          'personalizado',
         ],
         range: 1,
       });
@@ -497,6 +551,7 @@ function handleHistoryFileUpload(event: Event) {
           profit: raw.ganancia,
           total: raw.total,
           comment: raw.comentario,
+          isCustom: (raw.personalizado || '').toLowerCase() === 'si',
         };
       });
 
